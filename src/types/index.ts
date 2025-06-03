@@ -1,14 +1,14 @@
-import { Role } from '@prisma/client';
 import { Request } from 'express';
+import { JwtPayload } from 'jsonwebtoken';
 
-export interface UserPayload {
+export interface UserPayload extends JwtPayload {
   id: string;
   username: string;
   email: string;
-  role: Role;
+  role: 'ADMIN' | 'MAHASISWA';
 }
 
-// Perbaiki: gunakan extends Request dengan benar
 export interface RequestWithUser extends Request {
   user?: UserPayload;
 }
+

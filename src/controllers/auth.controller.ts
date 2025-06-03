@@ -1,8 +1,12 @@
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import { Request, Response } from 'express';
 import jwt, { Secret } from 'jsonwebtoken';
 import config from '../config';
 import prisma from '../utils/prisma';
+
+// Type assertion to fix Prisma TypeScript issues
+const db = prisma as any;
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -15,7 +19,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Check if email exists
-    const existingEmail = await prisma.user.findUnique({
+    const existingEmail = await db.user.findUnique({
       where: { email }
     });
 
@@ -25,7 +29,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Check if username exists
-    const existingUsername = await prisma.user.findUnique({
+    const existingUsername = await db.user.findUnique({
       where: { username }
     });
 
@@ -36,7 +40,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     // Check if NIM exists (if provided)
     if (nim) {
-      const existingNim = await prisma.user.findUnique({
+      const existingNim = await db.user.findUnique({
         where: { nim }
       });
 
@@ -50,7 +54,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create user
-    const user = await prisma.user.create({
+    const user = await db.user.create({
       data: {
         username,
         email,
@@ -91,7 +95,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Check if user exists
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { email }
     });
 
@@ -151,7 +155,7 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -169,9 +173,141 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    res.json(user);
+    // If user is a student, include point statistics
+    if (user.role === 'MAHASISWA') {
+      const approvedActivities = await db.activity.findMany({
+        where: {
+          userId,
+          status: 'APPROVED'
+        },
+        select: { point: true }
+      });
+
+      const totalPoints = approvedActivities.reduce((sum: number, activity: any) => {
+        return sum + (activity.point || 0);
+      }, 0);
+
+      const TARGET_POINTS = 36;
+      const completionPercentage = Math.min((totalPoints / TARGET_POINTS) * 100, 100);
+
+      res.json({
+        ...user,
+        statistics: {
+          totalPoints,
+          targetPoints: TARGET_POINTS,
+          completionPercentage: Math.round(completionPercentage * 100) / 100,
+          remainingPoints: Math.max(TARGET_POINTS - totalPoints, 0),
+          isCompleted: totalPoints >= TARGET_POINTS
+        }
+      });
+    } else {
+      res.json(user);
+    }
   } catch (error) {
     console.error('Get profile error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400).json({ message: 'Email is required' });
+      return;
+    }
+
+    // Check if user exists
+    const user = await db.user.findUnique({
+      where: { email }
+    });
+
+    if (!user) {
+      // For security reasons, don't reveal that the email doesn't exist
+      res.status(200).json({ message: 'If your email is registered, you will receive a password reset link' });
+      return;
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetPasswordToken = crypto
+      .createHash('sha256')
+      .update(resetToken)
+      .digest('hex');
+
+    // Set token expiry (1 hour from now)
+    const resetPasswordExpires = new Date(Date.now() + 3600000);
+
+    // Save token to database
+    await db.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordToken,
+        resetPasswordExpires
+      }
+    });
+
+    // In a real application, you would send an email with the reset link
+    // For this example, we'll just return the token
+    res.status(200).json({
+      message: 'If your email is registered, you will receive a password reset link',
+      // In production, remove the token from the response
+      resetToken
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      res.status(400).json({ message: 'Token and password are required' });
+      return;
+    }
+
+    // Hash the token from the URL
+    const resetPasswordToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    // Find user with the token and check if token is still valid
+    const user = await db.user.findFirst({
+      where: {
+        resetPasswordToken,
+        resetPasswordExpires: {
+          gt: new Date()
+        }
+      }
+    });
+
+    if (!user) {
+      res.status(400).json({ message: 'Invalid or expired token' });
+      return;
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Update user password and clear reset token fields
+    await db.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        resetPasswordToken: null,
+        resetPasswordExpires: null
+      }
+    });
+
+    res.status(200).json({ message: 'Password has been reset successfully' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+

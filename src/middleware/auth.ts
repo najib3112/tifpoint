@@ -1,20 +1,9 @@
-import { Request, RequestHandler } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import config from '../config';
+import { RequestWithUser, UserPayload } from '../types';
 
-// Definisikan UserPayload dan RequestWithUser langsung di file ini
-export interface UserPayload {
-  id: string;
-  username: string;
-  email: string;
-  role: string;
-}
-
-export interface RequestWithUser extends Request {
-  user?: UserPayload;
-}
-
-export const auth: RequestHandler = (req, res, next) => {
+export const auth = (req: Request, res: Response, next: NextFunction) => {
   try {
     // Get token from header
     const authHeader = req.headers.authorization;
@@ -30,7 +19,7 @@ export const auth: RequestHandler = (req, res, next) => {
     const decoded = jwt.verify(token, config.jwtSecret) as UserPayload;
     
     // Add user from payload to request
-    (req as any).user = decoded;
+    (req as RequestWithUser).user = decoded;
     
     next();
   } catch (error) {
@@ -38,11 +27,17 @@ export const auth: RequestHandler = (req, res, next) => {
   }
 };
 
-export const adminOnly: RequestHandler = (req, res, next) => {
-  const userReq = req as any;
+export const adminOnly = (req: Request, res: Response, next: NextFunction) => {
+  const userReq = req as RequestWithUser;
   if (userReq.user?.role !== 'ADMIN') {
     res.status(403).json({ message: 'Access denied. Admin only.' });
     return;
   }
   next();
 };
+
+
+
+
+
+

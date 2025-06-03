@@ -1,40 +1,33 @@
-import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 
-// Create uploads directory if it doesn't exist
-const uploadsDir = path.join(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-
-// Set storage engine
+// Configure storage
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
+  destination: (req, file, cb) => {
     cb(null, 'uploads/');
   },
-  filename: function (req, file, cb) {
+  filename: (req, file, cb) => {
     cb(null, `${Date.now()}-${file.originalname}`);
   }
 });
 
 // Check file type
 const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  // Allowed file types
-  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
-  
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
+  const filetypes = /jpeg|jpg|png|pdf/;
+  const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = filetypes.test(file.mimetype);
+
+  if (mimetype && extname) {
+    return cb(null, true);
   } else {
-    cb(null, false);
-    return cb(new Error('Only .jpeg, .jpg, .png and .pdf files are allowed'));
+    cb(new Error('Error: File upload only supports the following filetypes - ' + filetypes));
   }
 };
 
-// Initialize upload middleware
+// Init upload
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max file size
+  limits: { fileSize: 5000000 }, // 5MB
   fileFilter: fileFilter
 });
 

@@ -22,6 +22,66 @@ async function main() {
 
     console.log('Admin user created:', admin);
 
+    // Create competencies
+    const competencies = [
+      {
+        name: 'Software Developer',
+        description: 'Competency in software development',
+      },
+      {
+        name: 'Network Technology',
+        description: 'Competency in network technology',
+      },
+      {
+        name: 'Artificial Intelligence',
+        description: 'Competency in artificial intelligence',
+      },
+      {
+        name: 'Soft Skills',
+        description: 'Competency in soft skills',
+      },
+    ];
+
+    for (const competency of competencies) {
+      await prisma.competency.create({
+        data: competency,
+      });
+    }
+
+    console.log('Competencies created');
+
+    // Create activity types
+    const activityTypes = [
+      {
+        name: 'Seminar',
+        description: 'Participation in seminars',
+      },
+      {
+        name: 'Course',
+        description: 'Completion of courses',
+      },
+      {
+        name: 'Program',
+        description: 'Participation in programs',
+      },
+      {
+        name: 'Research',
+        description: 'Involvement in research',
+      },
+      {
+        name: 'Achievement',
+        description: 'Awards and achievements',
+      },
+    ];
+
+    for (const activityType of activityTypes) {
+      await prisma.activityType.create({
+        data: activityType,
+      });
+    }
+
+    console.log('Activity types created');
+
     // Create some sample recognized courses
     const courses = [
       {
@@ -37,6 +97,13 @@ async function main() {
         duration: 60,
         pointValue: 6,
         url: 'https://www.coursera.org/learn/python',
+      },
+      {
+        name: 'Machine Learning Fundamentals',
+        provider: 'edX',
+        duration: 80,
+        pointValue: 8,
+        url: 'https://www.edx.org/learn/machine-learning',
       },
     ];
 
@@ -64,6 +131,13 @@ async function main() {
         location: 'Lab Komputer 2',
         pointValue: 4,
       },
+      {
+        title: 'Hackathon TIF 2025',
+        description: 'Kompetisi pengembangan aplikasi selama 24 jam',
+        date: new Date(2025, 8, 10), // September 10, 2025
+        location: 'Gedung Informatika',
+        pointValue: 10,
+      },
     ];
 
     for (const event of events) {
@@ -88,3 +162,5 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
+

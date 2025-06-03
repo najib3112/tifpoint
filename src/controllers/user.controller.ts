@@ -2,9 +2,52 @@ import bcrypt from 'bcrypt';
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 
+// Type assertion to fix Prisma TypeScript issues
+const db = prisma as any;
+
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
-    const users = await prisma.user.findMany({
+    const { nim, role, search } = req.query;
+
+    // Build where clause for filtering
+    const whereClause: any = {};
+
+    if (nim) {
+      whereClause.nim = {
+        contains: nim as string,
+        mode: 'insensitive'
+      };
+    }
+
+    if (role) {
+      whereClause.role = role as string;
+    }
+
+    if (search) {
+      whereClause.OR = [
+        {
+          name: {
+            contains: search as string,
+            mode: 'insensitive'
+          }
+        },
+        {
+          username: {
+            contains: search as string,
+            mode: 'insensitive'
+          }
+        },
+        {
+          email: {
+            contains: search as string,
+            mode: 'insensitive'
+          }
+        }
+      ];
+    }
+
+    const users = await db.user.findMany({
+      where: whereClause,
       select: {
         id: true,
         username: true,
@@ -14,6 +57,9 @@ export const getAllUsers = async (req: Request, res: Response) => {
         role: true,
         createdAt: true,
         updatedAt: true
+      },
+      orderBy: {
+        createdAt: 'desc'
       }
     });
 
@@ -29,7 +75,7 @@ export const getUserById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -62,7 +108,7 @@ export const updateUser = async (req: Request, res: Response) => {
     const { username, email, name, nim, role, password } = req.body;
     
     // Check if user exists
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await db.user.findUnique({
       where: { id }
     });
 
@@ -94,7 +140,7 @@ export const updateUser = async (req: Request, res: Response) => {
     }
 
     // Update user
-    const updatedUser = await prisma.user.update({
+    const updatedUser = await db.user.update({
       where: { id },
       data: updateData,
       select: {
@@ -125,7 +171,7 @@ export const deleteUser = async (req: Request, res: Response) => {
     const { id } = req.params;
     
     // Check if user exists
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await db.user.findUnique({
       where: { id }
     });
 
@@ -141,7 +187,7 @@ export const deleteUser = async (req: Request, res: Response) => {
     }
 
     // Delete user
-    await prisma.user.delete({
+    await db.user.delete({
       where: { id }
     });
 
