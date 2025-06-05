@@ -1,18 +1,31 @@
+import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 
+// Ensure uploads directory exists
+const uploadsDir = 'uploads/';
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('📁 Created uploads/ directory');
+}
+
 // Configure storage
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+  destination: (_req, _file, cb) => {
+    // Double-check directory exists before each upload
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+      console.log('📁 Created uploads/ directory during upload');
+    }
+    cb(null, uploadsDir);
   },
-  filename: (req, file, cb) => {
+  filename: (_req, file, cb) => {
     cb(null, `${Date.now()}-${file.originalname}`);
   }
 });
 
 // Check file type
-const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   const filetypes = /jpeg|jpg|png|pdf/;
   const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = filetypes.test(file.mimetype);
