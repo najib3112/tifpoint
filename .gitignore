@@ -7,3 +7,6 @@ dist/
 
 # Build artifacts
 *.tsbuildinfo
+
+# Upload temporary files
+uploads/
