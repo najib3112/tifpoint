@@ -37,7 +37,7 @@ router.post('/', auth, (req, res, next) => {
     }
 
     // No error, proceed to controller
-    next();
+    return next();
   });
 }, uploadFile);
 

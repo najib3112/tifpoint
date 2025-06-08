@@ -31,7 +31,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/recognized-courses', recognizedCourseRoutes);
 app.use('/api/events', eventRoutes);
-// Hapus app.use untuk submissionRoutes jika ada
+
 
 // Basic route
 app.get('/', (req, res) => {

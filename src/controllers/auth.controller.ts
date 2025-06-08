@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { Request, Response } from 'express';
 import jwt, { Secret } from 'jsonwebtoken';
 import config from '../config';
+import emailService from '../utils/emailService';
 import prisma from '../utils/prisma';
 
 // Type assertion to fix Prisma TypeScript issues
@@ -248,53 +249,124 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
       }
     });
 
-    // In a real application, you would send an email with the reset link
-    // For this example, we'll just return the token
-    res.status(200).json({
-      message: 'If your email is registered, you will receive a password reset link',
-      // In production, remove the token from the response
-      resetToken
-    });
+    // Send password reset email
+    try {
+      // Check if email service is configured
+      const isEmailConfigured = process.env.EMAIL_USER &&
+                                process.env.EMAIL_PASSWORD &&
+                                process.env.EMAIL_USER !== 'your-brevo-email@domain.com' &&
+                                process.env.EMAIL_USER !== 'your-gmail@gmail.com' &&
+                                process.env.EMAIL_PASSWORD !== 'your-brevo-smtp-key' &&
+                                process.env.EMAIL_PASSWORD !== 'your-gmail-app-password';
+
+      console.log('📧 Email configuration check:', {
+        hasEmailUser: !!process.env.EMAIL_USER,
+        hasEmailPassword: !!process.env.EMAIL_PASSWORD,
+        emailUser: process.env.EMAIL_USER,
+        isConfigured: isEmailConfigured
+      });
+
+      if (!isEmailConfigured) {
+        console.log('📧 Email service not configured, returning token for development');
+        res.status(200).json({
+          message: 'Email service not configured. Here is your reset token for development:',
+          resetToken,
+          note: 'Configure EMAIL_USER and EMAIL_PASSWORD in .env to enable email sending'
+        });
+        return;
+      }
+
+      console.log(`📧 Attempting to send password reset email to: ${user.email}`);
+
+      const emailSent = await emailService.sendPasswordResetEmail(
+        user.email,
+        resetToken,
+        user.name
+      );
+
+      if (emailSent) {
+        console.log(`✅ Password reset email sent successfully to: ${user.email}`);
+        res.status(200).json({
+          message: 'Password reset link has been sent to your email'
+        });
+      } else {
+        console.error('❌ Failed to send password reset email');
+        res.status(200).json({
+          message: 'Email service error. Here is your reset token for development:',
+          resetToken,
+          note: 'Email sending failed, but token is still valid'
+        });
+      }
+    } catch (emailError: any) {
+      console.error('❌ Email service error:', emailError);
+
+      // Always provide fallback token for development
+      res.status(200).json({
+        message: 'Email service error. Here is your reset token for development:',
+        resetToken,
+        error: emailError?.message || 'Unknown email error',
+        note: 'Token is still valid for password reset'
+      });
+    }
   } catch (error) {
     console.error('Forgot password error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
+// Reset Password with Token
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { token, password } = req.body;
+    const { token, newPassword } = req.body;
 
-    if (!token || !password) {
-      res.status(400).json({ message: 'Token and password are required' });
+    // Validate input
+    if (!token || !newPassword) {
+      res.status(400).json({
+        message: 'Token and new password are required'
+      });
       return;
     }
 
-    // Hash the token from the URL
-    const resetPasswordToken = crypto
+    // Validate password strength
+    if (newPassword.length < 6) {
+      res.status(400).json({
+        message: 'Password must be at least 6 characters long'
+      });
+      return;
+    }
+
+    // Hash the token to compare with database
+    const hashedToken = crypto
       .createHash('sha256')
       .update(token)
       .digest('hex');
 
-    // Find user with the token and check if token is still valid
+    console.log(`🔍 Looking for user with reset token...`);
+
+    // Find user with valid reset token
     const user = await db.user.findFirst({
       where: {
-        resetPasswordToken,
+        resetPasswordToken: hashedToken,
         resetPasswordExpires: {
-          gt: new Date()
+          gt: new Date() // Token not expired
         }
       }
     });
 
     if (!user) {
-      res.status(400).json({ message: 'Invalid or expired token' });
+      console.log('❌ Invalid or expired reset token');
+      res.status(400).json({
+        message: 'Invalid or expired reset token'
+      });
       return;
     }
 
-    // Hash the new password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    console.log(`✅ Valid token found for user: ${user.email}`);
 
-    // Update user password and clear reset token fields
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // Update user password and clear reset token
     await db.user.update({
       where: { id: user.id },
       data: {
@@ -304,10 +376,17 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       }
     });
 
-    res.status(200).json({ message: 'Password has been reset successfully' });
+    console.log(`✅ Password reset successful for user: ${user.email}`);
+
+    res.status(200).json({
+      message: 'Password has been reset successfully'
+    });
+
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+
 
